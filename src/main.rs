@@ -14,7 +14,7 @@ fn savetofile() -> Result<(), std::io::Error> {
     let (mut client, mut connection) = Client::new(mqttoptions, 200);
 
     let start = Utc::now();
-    let filename = format!("/home/olof/mqtt/firehose.{}", start.format("%Y-%m-%d"));
+    let filename = format!("/data/mqtt/firehose.{}", start.format("%Y-%m-%d"));
     info!("Writing to {}", filename);
     let mut outfile = OpenOptions::new()
         .append(true)
@@ -45,7 +45,7 @@ fn savetofile() -> Result<(), std::io::Error> {
             // New day, new file
             day = now;
             // No way to explicitly close a file, but dropping old reference does it
-            let filename = format!("/home/olof/mqtt/firehose.{}", now.format("%Y-%m-%d"));
+            let filename = format!("/data/mqtt/firehose.{}", now.format("%Y-%m-%d"));
             info!("Writing to {} now", filename);
             outfile = OpenOptions::new()
                 .append(true)
