@@ -57,6 +57,7 @@ fn savetofile() -> Result<(), std::io::Error> {
                 session_present: _,
                 code: Success,
             }))) => {
+                info!("Connection re-established after {} events", i);
                 // pskr/filter/band/mode/txcallsign/rxcallsign/txgrid/rxgrid/txdxcc/rxdxcc
                 client
                     .subscribe("pskr/filter/v2/#", QoS::AtMostOnce)
