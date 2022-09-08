@@ -12,7 +12,6 @@ COPY ./src src
 # build with x86_64-unknown-linux-musl to make it runs on alpine.
 RUN cargo install --path /app --target=x86_64-unknown-linux-musl
 
-
 FROM alpine:3.14
 COPY --from=builder /usr/local/cargo/bin/* /usr/local/bin/
 
@@ -29,5 +28,6 @@ RUN adduser \
 
 USER user
 WORKDIR /
+ENV RUST_LOG=mqtt_saver
 ENTRYPOINT ["/usr/local/bin/mqtt-saver"]
 VOLUME /data
