@@ -1,6 +1,5 @@
 use chrono::Utc;
-use rumqttc::{Client, MqttOptions, MqttState, QoS, StateError};
-use std::fs;
+use rumqttc::{Client, MqttOptions, QoS};
 use std::fs::OpenOptions;
 use std::io::{Error, ErrorKind, Write};
 use std::time::Duration;
@@ -84,7 +83,7 @@ fn savetofile() -> Result<(), std::io::Error> {
             // Reconnected. Need to subscribe to the feed again.
             Ok(rumqttc::Event::Incoming(rumqttc::Packet::ConnAck(rumqttc::ConnAck {
                 session_present: _,
-                code: Success,
+                code: rumqttc::ConnectReturnCode::Success,
             }))) => {
                 info!("Connection re-established after {} events", i);
                 // pskr/filter/band/mode/txcallsign/rxcallsign/txgrid/rxgrid/txdxcc/rxdxcc
