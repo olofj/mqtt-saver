@@ -7,6 +7,14 @@ use std::time::Duration;
 #[macro_use]
 extern crate log;
 
+const FILE_PREFIX: &str = "/data/mqtt/firehose";
+
+fn logfile() -> Result<std::fs::File, std::io::Error> {
+    let filename = format!("{}.{}", FILE_PREFIX, Utc::now().format("%Y-%m-%d"));
+    info!("Writing to {}", filename);
+    OpenOptions::new().append(true).create(true).open(filename)
+}
+
 fn savetofile() -> Result<(), std::io::Error> {
     let mut mqttoptions = MqttOptions::new("rust-mqtt-hacking", "67.207.77.99", 1883);
     mqttoptions.set_keep_alive(Duration::from_secs(30));
@@ -14,12 +22,7 @@ fn savetofile() -> Result<(), std::io::Error> {
     let (mut client, mut connection) = Client::new(mqttoptions, 200);
 
     let start = Utc::now();
-    let filename = format!("/data/mqtt/firehose.{}", start.format("%Y-%m-%d"));
-    info!("Writing to {}", filename);
-    let mut outfile = OpenOptions::new()
-        .append(true)
-        .create(true)
-        .open(filename)?;
+    let mut outfile = logfile()?;
     let mut day = start.date_naive();
 
     const INFO_INTERVAL: usize = 10000;
@@ -27,6 +30,7 @@ fn savetofile() -> Result<(), std::io::Error> {
     let mut last_info = Utc::now();
 
     for (i, notification) in connection.iter().enumerate() {
+        // Time to log progress report?
         if i == next_info {
             let now = Utc::now();
             let secs = (now - start).num_seconds().abs() as usize;
@@ -41,18 +45,14 @@ fn savetofile() -> Result<(), std::io::Error> {
             last_info = now;
         }
         let now = Utc::now().date_naive();
+        // New day, start a new log file
         if now != day {
-            // New day, new file
             day = now;
             // No way to explicitly close a file, but dropping old reference does it
-            let filename = format!("/data/mqtt/firehose.{}", now.format("%Y-%m-%d"));
-            info!("Writing to {} now", filename);
-            outfile = OpenOptions::new()
-                .append(true)
-                .create(true)
-                .open(filename)?;
+            outfile = logfile()?;
         }
         match notification {
+            // Reconnected. Need to subscribe to the feed again.
             Ok(rumqttc::Event::Incoming(rumqttc::Packet::ConnAck(rumqttc::ConnAck {
                 session_present: _,
                 code: Success,
@@ -63,6 +63,8 @@ fn savetofile() -> Result<(), std::io::Error> {
                     .subscribe("pskr/filter/v2/#", QoS::AtMostOnce)
                     .unwrap();
             }
+
+            // Normal payload packet, write out to the file (and add newline)
             Ok(rumqttc::Event::Incoming(rumqttc::Packet::Publish(rumqttc::Publish {
                 topic: _,
                 payload,
@@ -71,9 +73,13 @@ fn savetofile() -> Result<(), std::io::Error> {
                 outfile.write_all(&payload)?;
                 outfile.write(b"\n")?;
             }
+
+            // Ping or Ping response, do nothing
             Ok(rumqttc::Event::Incoming(rumqttc::Packet::PingResp))
             | Ok(rumqttc::Event::Outgoing(_)) => {}
-            _ => debug!("Notification = {:?}", notification),
+
+            // Catch-all, log and continue
+            _ => debug!("Event {}: Notification = {:?}", events, notification),
         }
     }
     Ok(())
