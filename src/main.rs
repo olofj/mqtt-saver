@@ -1,5 +1,5 @@
 use chrono::Utc;
-use rumqttc::{Client, MqttOptions, QoS};
+use rumqttc::{Client, Event, MqttOptions, Packet, QoS};
 use std::fs::OpenOptions;
 use std::io::{Error, ErrorKind, Write};
 use std::time::Duration;
@@ -56,6 +56,7 @@ fn savetofile() -> Result<(), std::io::Error> {
     const INFO_INTERVAL: usize = 10000;
     let mut next_info = INFO_INTERVAL;
     let mut last_info = Utc::now();
+    let mut written = 0;
 
     for (i, notification) in connection.iter().enumerate() {
         // Time to log progress report?
@@ -78,10 +79,11 @@ fn savetofile() -> Result<(), std::io::Error> {
             day = now;
             // No way to explicitly close a file, but dropping old reference does it
             outfile = openfile()?;
+            written = 0;
         }
         match notification {
-            // Reconnected. Need to subscribe to the feed again.
-            Ok(rumqttc::Event::Incoming(rumqttc::Packet::ConnAck(rumqttc::ConnAck {
+            // (Re)connected. Need to subscribe to the feed.
+            Ok(Event::Incoming(Packet::ConnAck(rumqttc::ConnAck {
                 session_present: _,
                 code: rumqttc::ConnectReturnCode::Success,
             }))) => {
@@ -90,18 +92,22 @@ fn savetofile() -> Result<(), std::io::Error> {
                 client
                     .subscribe("pskr/filter/v2/#", QoS::AtMostOnce)
                     .unwrap();
-                // Start a new output file in case server format changed, etc
-                outfile = openfile()?;
+            }
+            // Requested subscription ac, start a new output file if the previous
+            // one was written to, in case of server format changes, etc
+            Ok(Event::Incoming(Packet::SubAck(rumqttc::SubAck { .. }))) => {
+                if written > 0 {
+                    outfile = openfile()?;
+                }
             }
 
             // Normal payload packet, write out to the file (and add newline)
-            Ok(rumqttc::Event::Incoming(rumqttc::Packet::Publish(rumqttc::Publish {
-                topic: _,
-                payload,
-                ..
+            Ok(Event::Incoming(Packet::Publish(rumqttc::Publish {
+                topic: _, payload, ..
             }))) => {
                 outfile.write_all(&payload)?;
                 outfile.write(b"\n")?;
+                written += 1;
             }
 
             // Ping or Ping response, do nothing
