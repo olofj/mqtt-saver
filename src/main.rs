@@ -107,6 +107,7 @@ fn savetofile() -> Result<(), std::io::Error> {
             Ok(Event::Incoming(Packet::SubAck(rumqttc::SubAck { .. }))) => {
                 if written > 0 {
                     outfile = openfile()?;
+                    written = 0;
                 }
             }
 
