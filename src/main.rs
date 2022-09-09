@@ -1,7 +1,8 @@
 use chrono::Utc;
 use rumqttc::{Client, MqttOptions, MqttState, QoS, StateError};
+use std::fs;
 use std::fs::OpenOptions;
-use std::io::Write;
+use std::io::{Error, ErrorKind, Write};
 use std::time::Duration;
 
 #[macro_use]
@@ -9,10 +10,38 @@ extern crate log;
 
 const FILE_PREFIX: &str = "/data/mqtt/firehose";
 
-fn logfile() -> Result<std::fs::File, std::io::Error> {
-    let filename = format!("{}.{}", FILE_PREFIX, Utc::now().format("%Y-%m-%d"));
-    info!("Writing to {}", filename);
-    OpenOptions::new().append(true).create(true).open(filename)
+fn openfile() -> Result<std::fs::File, std::io::Error> {
+    let base_filename = format!("{}.{}", FILE_PREFIX, Utc::now().format("%Y-%m-%d"));
+
+    // Try up to 999 times with a .<number> file name instead of appending to the existing
+    // one.
+    for i in 0..1000 {
+        let filename = if i == 0 {
+            format!("{}", &base_filename)
+        } else {
+            format!("{}.{}", &base_filename, i)
+        };
+        let f = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&filename);
+        match f {
+            Ok(r) => {
+                info!("Writing to {}", &filename);
+                return Ok(r);
+            }
+            Err(e) => match e.kind() {
+                ErrorKind::AlreadyExists => {}
+                _ => {
+                    return Err(e);
+                }
+            },
+        }
+    }
+    Err(Error::new(
+        ErrorKind::AlreadyExists,
+        format!("Failed to open file {} for writing", base_filename),
+    ))
 }
 
 fn savetofile() -> Result<(), std::io::Error> {
@@ -22,7 +51,7 @@ fn savetofile() -> Result<(), std::io::Error> {
     let (mut client, mut connection) = Client::new(mqttoptions, 200);
 
     let start = Utc::now();
-    let mut outfile = logfile()?;
+    let mut outfile = openfile()?;
     let mut day = start.date_naive();
 
     const INFO_INTERVAL: usize = 10000;
@@ -49,7 +78,7 @@ fn savetofile() -> Result<(), std::io::Error> {
         if now != day {
             day = now;
             // No way to explicitly close a file, but dropping old reference does it
-            outfile = logfile()?;
+            outfile = openfile()?;
         }
         match notification {
             // Reconnected. Need to subscribe to the feed again.
@@ -79,7 +108,7 @@ fn savetofile() -> Result<(), std::io::Error> {
             | Ok(rumqttc::Event::Outgoing(_)) => {}
 
             // Catch-all, log and continue
-            _ => debug!("Event {}: Notification = {:?}", events, notification),
+            _ => debug!("Event {}: Notification = {:?}", i, notification),
         }
     }
     Ok(())
