@@ -9,34 +9,42 @@ extern crate log;
 
 const FILE_PREFIX: &str = "/data/mqtt/firehose";
 
+// Interval at which we log progress / rate
+const INFO_INTERVAL: usize = 10000;
+
+// Open a file for writting the output to. Attempt to create .<index> files
+// instead of continuing on the same file, to make re-opens/drops more obvious
+// when looking at the file contents.
+
 fn openfile() -> Result<std::fs::File, std::io::Error> {
     let base_filename = format!("{}.{}", FILE_PREFIX, Utc::now().format("%Y-%m-%d"));
 
-    // Try up to 999 times with a .<number> file name instead of appending to the existing
-    // one.
     for i in 0..1000 {
         let filename = if i == 0 {
             format!("{}", &base_filename)
         } else {
             format!("{}.{}", &base_filename, i)
         };
-        let f = OpenOptions::new()
+
+        match OpenOptions::new()
             .write(true)
             .create_new(true)
-            .open(&filename);
-        match f {
-            Ok(r) => {
+            .open(&filename)
+        {
+            Ok(f) => {
                 info!("Writing to {}", &filename);
-                return Ok(r);
+                return Ok(f);
             }
-            Err(e) => match e.kind() {
-                ErrorKind::AlreadyExists => {}
-                _ => {
+            Err(e) => {
+                if e.kind() != ErrorKind::AlreadyExists {
+                    // Actual error, not just "file exists". Bubble it up.
                     return Err(e);
                 }
-            },
+            }
         }
     }
+
+    // If we can't open by now, give up and return error
     Err(Error::new(
         ErrorKind::AlreadyExists,
         format!("Failed to open file {} for writing", base_filename),
@@ -53,7 +61,6 @@ fn savetofile() -> Result<(), std::io::Error> {
     let mut outfile = openfile()?;
     let mut day = start.date_naive();
 
-    const INFO_INTERVAL: usize = 10000;
     let mut next_info = INFO_INTERVAL;
     let mut last_info = Utc::now();
     let mut written = 0;
@@ -73,14 +80,15 @@ fn savetofile() -> Result<(), std::io::Error> {
             next_info += INFO_INTERVAL;
             last_info = now;
         }
-        let now = Utc::now().date_naive();
+
         // New day, start a new log file
-        if now != day {
-            day = now;
+        if day != Utc::now().date_naive() {
+            day = Utc::now().date_naive();
             // No way to explicitly close a file, but dropping old reference does it
             outfile = openfile()?;
             written = 0;
         }
+
         match notification {
             // (Re)connected. Need to subscribe to the feed.
             Ok(Event::Incoming(Packet::ConnAck(rumqttc::ConnAck {
@@ -93,8 +101,9 @@ fn savetofile() -> Result<(), std::io::Error> {
                     .subscribe("pskr/filter/v2/#", QoS::AtMostOnce)
                     .unwrap();
             }
-            // Requested subscription ac, start a new output file if the previous
-            // one was written to, in case of server format changes, etc
+
+            // Subscription ack, start a new output file if the previous
+            // one was written to (in case of server format changes, etc)
             Ok(Event::Incoming(Packet::SubAck(rumqttc::SubAck { .. }))) => {
                 if written > 0 {
                     outfile = openfile()?;
