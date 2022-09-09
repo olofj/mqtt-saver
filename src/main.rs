@@ -90,6 +90,8 @@ fn savetofile() -> Result<(), std::io::Error> {
                 client
                     .subscribe("pskr/filter/v2/#", QoS::AtMostOnce)
                     .unwrap();
+                // Start a new output file in case server format changed, etc
+                outfile = openfile()?;
             }
 
             // Normal payload packet, write out to the file (and add newline)
