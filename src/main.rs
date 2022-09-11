@@ -54,11 +54,13 @@ fn openfile() -> Result<std::fs::File, std::io::Error> {
 }
 
 fn savetofile() -> Result<(), std::io::Error> {
-    let client_id: String = thread_rng()
+    // Generate a completely random client_id for now
+    let rnd: String = thread_rng()
         .sample_iter(&Alphanumeric)
         .take(20)
         .map(char::from)
         .collect();
+    let client_id: String = format!("rust-hacking-{}", &rnd);
 
     let mut mqttoptions = MqttOptions::new(client_id, "mqtt.pskreporter.info", 1883);
     mqttoptions.set_keep_alive(Duration::from_secs(30));
