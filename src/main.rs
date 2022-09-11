@@ -1,4 +1,6 @@
 use chrono::Utc;
+use rand::distributions::Alphanumeric;
+use rand::{thread_rng, Rng};
 use rumqttc::{Client, Event, MqttOptions, Packet, QoS};
 use std::fs::OpenOptions;
 use std::io::{Error, ErrorKind, Write};
@@ -52,10 +54,16 @@ fn openfile() -> Result<std::fs::File, std::io::Error> {
 }
 
 fn savetofile() -> Result<(), std::io::Error> {
-    let mut mqttoptions = MqttOptions::new("rust-mqtt-hacking", "67.207.77.99", 1883);
+    let client_id: String = thread_rng()
+        .sample_iter(&Alphanumeric)
+        .take(20)
+        .map(char::from)
+        .collect();
+
+    let mut mqttoptions = MqttOptions::new(client_id, "mqtt.pskreporter.info", 1883);
     mqttoptions.set_keep_alive(Duration::from_secs(30));
 
-    let (mut client, mut connection) = Client::new(mqttoptions, 200);
+    let (mut client, mut connection) = Client::new(mqttoptions, 200000);
 
     let start = Utc::now();
     let mut outfile = openfile()?;
