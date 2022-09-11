@@ -2,8 +2,9 @@ use chrono::Utc;
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 use rumqttc::{Client, Event, MqttOptions, Packet, QoS};
-use std::fs::OpenOptions;
+use std::fs::{self, OpenOptions};
 use std::io::{Error, ErrorKind, Write};
+use std::path::Path;
 use std::time::Duration;
 
 #[macro_use]
@@ -27,6 +28,13 @@ fn openfile() -> Result<std::fs::File, std::io::Error> {
         } else {
             format!("{}.{}", &base_filename, i)
         };
+
+        // Create directory if needed
+        if let Some(dir) = Path::new(FILE_PREFIX).parent() {
+            if !dir.exists() {
+                fs::create_dir_all(dir)?;
+            }
+        }
 
         match OpenOptions::new()
             .write(true)
