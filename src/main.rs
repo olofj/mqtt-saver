@@ -13,7 +13,7 @@ extern crate log;
 const FILE_PREFIX: &str = "/data/mqtt/firehose";
 
 // Interval at which we log progress / rate
-const INFO_INTERVAL: usize = 10000;
+const INFO_INTERVAL: usize = 100000;
 
 // Open a file for writting the output to. Attempt to create .<index> files
 // instead of continuing on the same file, to make re-opens/drops more obvious
@@ -93,7 +93,7 @@ fn savetofile() -> Result<(), std::io::Error> {
                 "Processed {} events in {}s, {} events/s",
                 i,
                 secs,
-                INFO_INTERVAL / elapsed,
+                INFO_INTERVAL.checked_div(elapsed).unwrap_or(0),
             );
             next_info += INFO_INTERVAL;
             last_info = now;
